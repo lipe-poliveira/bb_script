@@ -11,5 +11,5 @@ go install -v github.com/tomnomnom/assetfinder@latest
 go install -v github.com/tomnomnom/crobat@latest
 
 # findomain
-# macOS (brew):    brew install findomain
-# Linux (deb):     sudo apt-get install -y findomain   # (ou baixe do GitHub releases)
+macOS (brew):    brew install findomain
+Linux (deb):     sudo apt-get install -y findomain   # (ou baixe do GitHub releases)
