@@ -1,0 +1,265 @@
+id: graphql-idor-policy-asset-group
+info:
+  name: GraphQL IDOR - Exposição de Policy/Asset Group por ID
+  author: you
+  severity: high
+  tags: graphql, idor, authorization
+  description: Detecta leitura não-autorizada de um recurso de política/asset group via ID em endpoint GraphQL.
+variables:
+  resource_id: "1"        # ajuste para um ID válido/aleatório do seu ambiente de teste
+requests:
+  - method: POST
+    path:
+      - "{{BaseURL}}/graphql"
+    headers:
+      Content-Type: application/json
+    body: |
+      {
+        "query": "query GetGroup($id: ID!){ policyPageAssetGroup(id:$id){ id name } }",
+        "variables": {"id": "{{resource_id}}"}
+      }
+    matchers-condition: and
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        part: body
+        words:
+          - "\"policyPageAssetGroup\""
+      - type: negative_word
+        part: body
+        words:
+          - "\"errors\""
+
+
+============================
+
+id: session-cookie-weak-flags
+info:
+  name: Cookie de sessão com flags fracas (Secure/HttpOnly/SameSite)
+  author: you
+  severity: medium
+  tags: misconfig, cookie, web
+  description: Verifica se cookies aparentam ser de sessão e não possuem flags de segurança adequadas.
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        dsl:
+          - 'contains(all_headers, "Set-Cookie") && !contains(all_headers, "HttpOnly")'
+      - type: dsl
+        dsl:
+          - 'contains(all_headers, "Set-Cookie") && !contains(all_headers, "Secure")'
+      - type: dsl
+        dsl:
+          - 'contains(all_headers, "Set-Cookie") && !regex(all_headers, "(?i)SameSite=(Strict|Lax)")'
+
+==========================
+
+id: graphql-email-enum-collaborators
+info:
+  name: GraphQL – Enumeração de e-mails via SaveCollaboratorsMutation (indicativa)
+  author: you
+  severity: high
+  tags: graphql, idor, privacy
+  description: Template indicativo para detectar respostas que vazam e-mails ao manipular mutações de colaboração.
+variables:
+  username: "testuser"    # substitua pelo usuário de teste autorizado
+requests:
+  - method: POST
+    path:
+      - "{{BaseURL}}/graphql"
+    headers:
+      Content-Type: application/json
+    body: |
+      {
+        "query":"mutation SaveCollaborators($u:String!){ SaveCollaboratorsMutation(username:$u){ collaborators{ id username email } } }",
+        "variables":{"u":"{{username}}"}
+      }
+    matchers-condition: and
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        part: body
+        words:
+          - "\"email\""
+      - type: negative_word
+        part: body
+        words:
+          - "\"errors\""
+===============================
+
+id: graphql-idor-update-certification
+info:
+  name: GraphQL IDOR – Update/Delete de certificações de outro usuário
+  author: you
+  severity: high
+  tags: graphql, idor, acl
+  description: Tenta atualizar/remover certificação de outro usuário sem privilégio.
+variables:
+  victim_id: "1001"       # ID de teste autorizado
+requests:
+  - method: POST
+    path:
+      - "{{BaseURL}}/graphql"
+    headers:
+      Content-Type: application/json
+    body: |
+      {
+        "query":"mutation UpdateCert($uid:ID!){ CreateOrUpdateHackerCertification(userId:$uid, input:{name:\"test\", issuer:\"poc\"}){ id name } }",
+        "variables":{"uid":"{{victim_id}}"}
+      }
+    matchers:
+      - type: status
+        status: [200]
+    extractors:
+      - type: regex
+        name: updated
+        part: body
+        regex:
+          - "\"CreateOrUpdateHackerCertification\"\\s*:\\s*\\{"
+======================================
+id: export-attachments-leak
+info:
+  name: Export ZIP – Vazamento de anexos/artefatos por export sem autenticação
+  author: you
+  severity: high
+  tags: idor, files, export
+  description: Verifica se endpoints de exportação permitem baixar ZIPs sem autenticação.
+variables:
+  report_id: "1234"       # ID de relatório/teste autorizado
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/reports/{{report_id}}/export.zip"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        part: header
+        words:
+          - "application/zip"
+=================================
+id: confluence-public-docs
+info:
+  name: Confluence – Documentos internos acessíveis publicamente
+  author: you
+  severity: high
+  tags: confluence, exposure, misconfig
+  description: Detecta páginas Confluence acessíveis sem autenticação (ex.: /spaces, /pages).
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/spaces"
+      - "{{BaseURL}}/pages"
+    stop-at-first-match: true
+    matchers-condition: or
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Confluence"
+      - type: regex
+        part: body
+        regex:
+          - "(?i)Space Directory|All Updates|Recently Updated"
+=================================
+id: export-activity-partial-leak
+info:
+  name: Export – Vazamento parcial de atividade de report
+  author: you
+  severity: medium
+  tags: export, privacy
+  description: Checa se export de atividade revela metadados sensíveis sem o devido controle.
+variables:
+  report_id: "1234"
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/reports/{{report_id}}/activity/export.csv"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        part: header
+        words:
+          - "text/csv"
+====================================
+id: skills-endpoint-info-disclosure
+info:
+  name: /skills – Exposição de informações sensíveis
+  author: you
+  severity: medium
+  tags: info, api
+  description: Verifica se o endpoint /skills retorna dados excessivos (PII/emails).
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/skills"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[A-Za-z]{2,}"
+      - type: word
+        part: body
+        words:
+          - "\"email\""
+============================
+id: embedded-form-2fa-bypass-indicator
+info:
+  name: Embedded submission – Indicador de bypass de 2FA (requisições sensíveis sem MFA)
+  author: you
+  severity: high
+  tags: 2fa, authn, authz
+  description: Sinaliza endpoints de formulário embutido aceitando ações sensíveis sem cabeçalhos/sessão que indiquem MFA.
+requests:
+  - method: POST
+    path:
+      - "{{BaseURL}}/embedded/form/submit"
+    headers:
+      Content-Type: application/json
+    body: '{"title":"poc","content":"test"}'
+    matchers-condition: and
+    matchers:
+      - type: status
+        status: [200, 201, 202]
+      - type: negative_word
+        part: body
+        words:
+          - "mfa"
+          - "2fa"
+          - "otp"
+================================
+id: invite-by-username-email-leak
+info:
+  name: Convite por username vazando e-mail
+  author: you
+  severity: high
+  tags: privacy, idor, api
+  description: Verifica se endpoint de convite, ao passar username, retorna e-mail do usuário.
+variables:
+  username: "testuser"
+requests:
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/invite"
+    headers:
+      Content-Type: application/json
+    body: '{"username":"{{username}}"}'
+    matchers-condition: and
+    matchers:
+      - type: status
+        status: [200]
+      - type: regex
+        part: body
+        regex:
+          - "(?i)\"email\"\\s*:\\s*\"[^\"]+@[^\\\"]+\""
+=================================
